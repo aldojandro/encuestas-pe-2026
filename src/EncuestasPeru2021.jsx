@@ -98,8 +98,8 @@ const CustomTooltip = ({ candidates }) => ({ active, payload, label }) => {
   );
 };
 
-const StarIcon = ({ filled }) => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "#fff" : "none"} stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+const StarIcon = ({ filled, size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "#fff" : "none"} stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
   </svg>
 );
@@ -181,10 +181,10 @@ const TopLegend = ({ candidates, hidden, toggle, focused, setFocused, highlight 
       const isFocused = focused.has(key);
       return (
         <div key={key} style={{
-          display: "flex", alignItems: "center", gap: 4,
+          display: "flex", alignItems: "center", gap: 6,
           opacity: isVisible ? 1 : 0.35,
           transition: "opacity 0.2s",
-          padding: "3px 12px",
+          padding: "3px 6px",
           minHeight: 32,
           background: "rgba(255,255,255,0.03)",
           borderRadius: 8,
@@ -193,7 +193,7 @@ const TopLegend = ({ candidates, hidden, toggle, focused, setFocused, highlight 
           <button
             onClick={() => toggle(key)}
             style={{
-              width: 12, height: 12, borderRadius: 3, flexShrink: 0,
+              width: 20, height: 20, borderRadius: 5, flexShrink: 0,
               border: `2px solid ${isVisible ? c.color : "rgba(255,255,255,0.2)"}`,
               background: isVisible ? c.color : "transparent",
               display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -201,7 +201,7 @@ const TopLegend = ({ candidates, hidden, toggle, focused, setFocused, highlight 
             }}
           >
             {isVisible && (
-              <svg width="7" height="5" viewBox="0 0 8 6" fill="none">
+              <svg width="11" height="8" viewBox="0 0 8 6" fill="none">
                 <path d="M1 3l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             )}
@@ -224,7 +224,7 @@ const TopLegend = ({ candidates, hidden, toggle, focused, setFocused, highlight 
               transition: "opacity 0.2s",
             }}
           >
-            <StarIcon filled={isFocused} />
+            <StarIcon filled={isFocused} size={20} />
           </button>
         </div>
       );
@@ -446,6 +446,7 @@ const DataTable = ({ data, candidates, label, tableOpen, setTableOpen, highlight
 
 // ── Slider thumb CSS (injected once) ──
 const sliderCSS = `
+  body { margin: 0; }
   @media (max-width: 640px) {
     .chart-section {
       flex-direction: column !important;
