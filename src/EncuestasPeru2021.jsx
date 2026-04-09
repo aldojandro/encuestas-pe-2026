@@ -27,10 +27,10 @@ const pollData2021 = [
 const CANDIDATES_2026 = {
   fujimori:    { name: "Keiko Fujimori",      short: "Fujimori",     color: "#F97316" },
   lopezAliaga: { name: "Rafael López Aliaga", short: "López Aliaga", color: "#3B82F6" },
-  alvarez:     { name: "Carlos Álvarez",      short: "Álvarez",      color: "#EAB308" },
-  sanchez:     { name: "Roberto Sánchez",     short: "Sánchez",      color: "#10B981" },
-  nieto:       { name: "Jorge Nieto",         short: "Nieto",        color: "#8B5CF6" },
-  belmont:     { name: "Ricardo Belmont",     short: "Belmont",      color: "#EC4899" },
+  alvarez:     { name: "Carlos Álvarez",      short: "Álvarez",      color: "#F8BE00" },
+  sanchez:     { name: "Roberto Sánchez",     short: "Sánchez",      color: "#10b981" },
+  nieto:       { name: "Jorge Nieto",         short: "Nieto",        color: "#8b5cf6" },
+  belmont:     { name: "Ricardo Belmont",     short: "Belmont",      color: "#ec4899" },
   perezTello:  { name: "Marisol Pérez Tello", short: "Pérez Tello",  color: "#06B6D4" },
   lopezChau:   { name: "Alfonso López-Chau",  short: "López-Chau",   color: "#DC2626" },
 };
@@ -74,26 +74,41 @@ const CustomTooltip = ({ candidates }) => ({ active, payload, label }) => {
       <p style={{ color: "#94A3B8", fontSize: 11, margin: "0 0 8px", letterSpacing: 1, textTransform: "uppercase" }}>
         {label} · {src}
       </p>
-      {payload
-        .filter(p => p.value != null)
-        .sort((a, b) => b.value - a.value)
-        .map((p) => (
-          <div key={p.dataKey} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "3px 0", gap: 12,
-          }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, color: p.color, fontSize: 13 }}>
-              <span style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: p.color, display: "inline-block",
-              }} />
-              {candidates[p.dataKey]?.name}
-            </span>
-            <span style={{ color: "#fff", fontSize: 14, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
-              {+p.value.toFixed(1)}%
-            </span>
-          </div>
-        ))}
+      {(() => {
+        // Normalize dataKey (strip "Priv" suffix) and dedupe so bridge rows
+        // that carry both solid + dashed keys don't show candidates twice.
+        const seen = new Set();
+        const rows = [];
+        payload
+          .filter((p) => p.value != null)
+          .forEach((p) => {
+            const baseKey = p.dataKey.endsWith("Priv")
+              ? p.dataKey.slice(0, -4)
+              : p.dataKey;
+            if (seen.has(baseKey)) return;
+            seen.add(baseKey);
+            rows.push({ ...p, baseKey });
+          });
+        return rows
+          .sort((a, b) => b.value - a.value)
+          .map((p) => (
+            <div key={p.baseKey} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "3px 0", gap: 12,
+            }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, color: p.color, fontSize: 13 }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: "50%",
+                  background: p.color, display: "inline-block",
+                }} />
+                {candidates[p.baseKey]?.name}
+              </span>
+              <span style={{ color: "#fff", fontSize: 14, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>
+                {+p.value.toFixed(1)}%
+              </span>
+            </div>
+          ));
+      })()}
     </div>
   );
 };
@@ -509,6 +524,27 @@ export default function EncuestasPeru() {
 
   const SOURCES = ["Ipsos", "Datum", "IEP"];
   const [activeSources, setActiveSources] = useState(new Set(SOURCES));
+
+  // ── Private polls (local-only, gitignored) ──
+  // The data file `./privatePolls.local.js` is gitignored. When absent
+  // (e.g. on GitHub / Vercel), `import.meta.glob` returns an empty map
+  // and the whole feature stays dead: no button, no data, no UI.
+  const privateModules = import.meta.glob("./privatePolls.local.js");
+  const [privatePolls2026, setPrivatePolls2026] = useState([]);
+  const [privateEnabled, setPrivateEnabled] = useState(false);
+  const [showPrivate, setShowPrivate] = useState(false);
+  useEffect(() => {
+    const loader = privateModules["./privatePolls.local.js"];
+    if (!loader) return;
+    loader()
+      .then((mod) => {
+        if (Array.isArray(mod.privatePolls2026) && mod.privatePolls2026.length) {
+          setPrivatePolls2026(mod.privatePolls2026);
+          setPrivateEnabled(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 const toggleSource = (s) => {
     setActiveSources((prev) => {
       const next = new Set(prev);
@@ -545,10 +581,43 @@ const toggleSource = (s) => {
     [dayMin, dayMax, activeSources]
   );
 
-  const filtered2026 = useMemo(
-    () => pollData2026.filter((d) => d.day >= dayMin && d.day <= dayMax && (activeSources.has(d.source) || d.source === "ONPE")),
-    [dayMin, dayMax, activeSources]
-  );
+  const filtered2026 = useMemo(() => {
+    const baseRows = pollData2026.filter(
+      (d) => d.day >= dayMin && d.day <= dayMax && (activeSources.has(d.source) || d.source === "ONPE")
+    );
+    if (!showPrivate || !privateEnabled || privatePolls2026.length === 0) {
+      return baseRows;
+    }
+    // Merge private polls (keep ONPE always last by day ordering)
+    const privFiltered = privatePolls2026.filter((d) => d.day >= dayMin && d.day <= dayMax);
+    const merged = [...baseRows, ...privFiltered].sort((a, b) => a.day - b.day);
+    // Find the last non-private, non-ONPE row → the "bridge" point
+    // where the dashed line visually departs from the solid one.
+    let bridgeRow = null;
+    for (let i = merged.length - 1; i >= 0; i--) {
+      if (!merged[i].private && merged[i].source !== "ONPE") {
+        bridgeRow = merged[i];
+        break;
+      }
+    }
+    const candKeys = Object.keys(CANDIDATES_2026);
+    return merged.map((r) => {
+      const next = { ...r };
+      candKeys.forEach((k) => {
+        if (r.private) {
+          // Private row: hide from solid line, show on dashed line
+          next[`${k}Priv`] = r[k];
+          next[k] = null;
+        } else if (r === bridgeRow) {
+          // Bridge: appears on BOTH lines so the dashed seg connects
+          next[`${k}Priv`] = r[k];
+        } else {
+          next[`${k}Priv`] = null;
+        }
+      });
+      return next;
+    });
+  }, [dayMin, dayMax, activeSources, showPrivate, privateEnabled, privatePolls2026]);
 
 
   const Tooltip2021 = useMemo(() => CustomTooltip({ candidates: CANDIDATES_2021 }), []);
@@ -645,6 +714,27 @@ const toggleSource = (s) => {
                 </button>
               );
             })}
+            {privateEnabled && (
+              <button
+                key="__private"
+                onClick={() => setShowPrivate((v) => !v)}
+                title={showPrivate ? "Ocultar encuestas privadas" : "Mostrar encuestas privadas"}
+                aria-pressed={showPrivate}
+                style={{
+                  fontFamily: "'Space Mono', monospace",
+                  fontSize: 11, letterSpacing: 0.5,
+                  padding: "6px 12px", borderRadius: 8,
+                  border: showPrivate ? "1px dashed rgba(255,255,255,0.35)" : "1px dashed rgba(255,255,255,0.12)",
+                  background: showPrivate ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.02)",
+                  color: showPrivate ? "#E2E8F0" : "#475569",
+                  cursor: "pointer", transition: "all 0.2s",
+                  fontWeight: showPrivate ? 700 : 400,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                👀
+              </button>
+            )}
           </div>
         </div>
 
@@ -703,7 +793,7 @@ const toggleSource = (s) => {
                       }}
                     />
                   )}
-                  {Object.entries(CANDIDATES_2026).map(([key, c]) => {
+                  {Object.entries(CANDIDATES_2026).flatMap(([key, c]) => {
                     const dimmed = focused2026.size > 0 && !focused2026.has(key);
                     const renderDot = (props) => {
                       const { cx, cy, payload } = props;
@@ -719,9 +809,10 @@ const toggleSource = (s) => {
                         />
                       );
                     };
-                    return (
+                    const lines = [
                       <Line
-                        key={key} type="monotone" dataKey={key}
+                        key={key}
+                        type="monotone" dataKey={key}
                         stroke={c.color} strokeWidth={2}
                         dot={renderDot}
                         activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2, fill: c.color }}
@@ -729,8 +820,26 @@ const toggleSource = (s) => {
                         hide={hidden2026.has(key)}
                         connectNulls={false}
                         animationDuration={800} animationEasing="ease-in-out"
-                      />
-                    );
+                      />,
+                    ];
+                    if (showPrivate && privateEnabled) {
+                      lines.push(
+                        <Line
+                          key={`${key}-priv`}
+                          type="monotone" dataKey={`${key}Priv`}
+                          stroke={c.color} strokeWidth={2}
+                          strokeDasharray="5 4"
+                          dot={renderDot}
+                          activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2, fill: c.color }}
+                          opacity={dimmed ? 0.1 : 0.85}
+                          hide={hidden2026.has(key)}
+                          connectNulls={false}
+                          animationDuration={800} animationEasing="ease-in-out"
+                          legendType="none"
+                        />
+                      );
+                    }
+                    return lines;
                   })}
                 </LineChart>
               </ResponsiveContainer>
