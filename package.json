@@ -1,7 +1,11 @@
 {
-  "name": "encuestas-peru-2021",
+  "name": "encuestas-pe-2026",
   "private": true,
   "version": "0.0.0",
+  "author": {
+    "name": "Aldo Huapaya",
+    "url": "https://github.com/aldojandro"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
